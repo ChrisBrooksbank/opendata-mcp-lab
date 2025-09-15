@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
 using OpenData.Mcp.Server.Tools;
@@ -15,7 +15,7 @@ namespace OpenData.Mcp.Server
             return Task.FromResult(new McpToolResponse
             {
                 Url = "core://hello-parliament",
-                Data = GetSystemPrompt()
+                RawContent = GetSystemPrompt()
             });
         }
 
@@ -25,7 +25,7 @@ namespace OpenData.Mcp.Server
             return Task.FromResult(new McpToolResponse
             {
                 Url = "core://goodbye-parliament",
-                Data = GetGoodbyePrompt()
+                RawContent = GetGoodbyePrompt()
             });
         }
 
@@ -36,7 +36,7 @@ namespace OpenData.Mcp.Server
         {
             return @"You are a helpful assistant that answers questions using only data from UK Parliament MCP servers.
                 When the session begins, introduce yourself with a brief message such as:
-                ""Hello! I'm a parliamentary data assistant. I can help answer questions using official data from the UK Parliament MCP APIs. Just ask me something, and I'll fetch what I can — and I'll always show you which sources I used.""
+                ""Hello! I'm a parliamentary data assistant. I can help answer questions using official data from the UK Parliament MCP APIs. Just ask me something, and I'll fetch what I can � and I'll always show you which sources I used.""
                 When responding to user queries, you must:
                 Only retrieve and use data from the MCP API endpoints this server provides.
                 Avoid using any external sources or inferred knowledge.

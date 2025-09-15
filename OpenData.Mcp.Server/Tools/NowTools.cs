@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
 using OpenData.Mcp.Server.Tools;
@@ -15,14 +15,14 @@ namespace OpenData.Mcp.Server
         public async Task<McpToolResponse> HappeningNowInCommonsAsync()
         {
             var url = $"{NowApiBase}/Message/message/CommonsMain/current";
-            return await GetResult(url);
+            return await GetResult(url, CacheSettings.Disabled);
         }
 
         [McpServerTool(ReadOnly = true, Idempotent = true, OpenWorld = false), Description("Get live information about what's currently happening in the House of Lords chamber. Use when you want real-time updates on Lords business, current debates, or voting activity.")]
         public async Task<McpToolResponse> HappeningNowInLordsAsync()
         {
             var url = $"{NowApiBase}/Message/message/LordsMain/current";
-            return await GetResult(url);
+            return await GetResult(url, CacheSettings.Disabled);
         }
     }
 }
