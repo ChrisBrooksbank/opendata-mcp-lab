@@ -1,7 +1,9 @@
-using System.Text.Json;
 using System.Net;
-using Microsoft.Extensions.Logging;
+using System.Text.Json;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
+using OpenData.Mcp.Server.Infrastructure;
+using Polly.CircuitBreaker;
 
 namespace OpenData.Mcp.Server.Tools
 {
@@ -55,17 +57,11 @@ namespace OpenData.Mcp.Server.Tools
     /// </summary>
     public abstract class BaseTools
     {
+        protected static readonly TimeSpan CacheExpiration = TimeSpan.FromMinutes(15);
+
         protected readonly IHttpClientFactory HttpClientFactory;
         protected readonly ILogger Logger;
         protected readonly IMemoryCache Cache;
-
-        // HTTP configuration constants
-        protected static readonly TimeSpan HttpTimeout = TimeSpan.FromSeconds(30);
-        public const int MaxRetryAttempts = 3;
-        protected static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(1);
-
-        // Cache configuration constants
-        protected static readonly TimeSpan CacheExpiration = TimeSpan.FromMinutes(15);
 
         /// <summary>
         /// Allows individual tool calls to override cache behaviour.
@@ -87,9 +83,6 @@ namespace OpenData.Mcp.Server.Tools
         /// <summary>
         /// Builds a URL with query parameters, filtering out null or empty values.
         /// </summary>
-        /// <param name="baseUrl">The base URL</param>
-        /// <param name="parameters">Dictionary of parameter key-value pairs</param>
-        /// <returns>Complete URL with query string</returns>
         protected static string BuildUrl(string baseUrl, Dictionary<string, string?> parameters)
         {
             var validParams = parameters
@@ -103,12 +96,8 @@ namespace OpenData.Mcp.Server.Tools
         }
 
         /// <summary>
-        /// Makes an HTTP GET request with retry logic, caching, and comprehensive error handling.
-        /// Returns structured response with URL and data/error information.
+        /// Makes an HTTP GET request with resiliency that relies on configured Polly policies.
         /// </summary>
-        /// <param name="url">The URL to make the request to</param>
-        /// <param name="cacheSettings">Optional cache settings for the request</param>
-        /// <returns>Structured response containing URL and either data or error details</returns>
         protected async Task<McpToolResponse> GetResult(string url, CacheSettings? cacheSettings = null)
         {
             var settings = cacheSettings ?? CacheSettings.Default;
@@ -119,121 +108,55 @@ namespace OpenData.Mcp.Server.Tools
                 return cachedResponse;
             }
 
-            for (var attempt = 0; attempt < MaxRetryAttempts; attempt++)
+            try
             {
-                try
+                using var httpClient = HttpClientFactory.CreateClient(HttpClientPolicyFactory.ClientName);
+                var response = await httpClient.GetAsync(url);
+
+                if (response.IsSuccessStatusCode)
                 {
-                    using var httpClient = HttpClientFactory.CreateClient();
-                    httpClient.Timeout = HttpTimeout;
+                    var responseContent = await response.Content.ReadAsStringAsync();
+                    Logger.LogInformation("Successfully retrieved data from {Url}", url);
 
-                    Logger.LogInformation(
-                        "Making HTTP request to {Url} (attempt {Attempt}/{MaxAttempts})",
-                        url,
-                        attempt + 1,
-                        MaxRetryAttempts);
+                    var result = CreateSuccessResponse(url, responseContent);
 
-                    var response = await httpClient.GetAsync(url);
-
-                    if (response.IsSuccessStatusCode)
+                    if (settings.Enabled)
                     {
-                        var responseContent = await response.Content.ReadAsStringAsync();
-                        Logger.LogInformation("Successfully retrieved data from {Url}", url);
-
-                        var result = CreateSuccessResponse(url, responseContent);
-
-                        if (settings.Enabled)
+                        var cacheEntryOptions = new MemoryCacheEntryOptions
                         {
-                            var cacheEntryOptions = new MemoryCacheEntryOptions
-                            {
-                                AbsoluteExpirationRelativeToNow = settings.AbsoluteExpirationRelativeToNow ?? CacheExpiration
-                            };
+                            AbsoluteExpirationRelativeToNow = settings.AbsoluteExpirationRelativeToNow ?? CacheExpiration
+                        };
 
-                            Cache.Set(url, result, cacheEntryOptions);
-                        }
-
-                        return result;
+                        Cache.Set(url, result, cacheEntryOptions);
                     }
 
-                    if (IsTransientFailure(response.StatusCode))
-                    {
-                        Logger.LogWarning(
-                            "Transient failure for {Url}: {StatusCode}. Attempt {Attempt}/{MaxAttempts}",
-                            url,
-                            response.StatusCode,
-                            attempt + 1,
-                            MaxRetryAttempts);
-
-                        if (attempt < MaxRetryAttempts - 1)
-                        {
-                            await Task.Delay(RetryDelay * (attempt + 1));
-                            continue;
-                        }
-                    }
-
-                    var errorMessage = $"HTTP request failed with status {response.StatusCode}: {response.ReasonPhrase}";
-                    Logger.LogError("Final failure for {Url}: {StatusCode}", url, response.StatusCode);
-                    return CreateErrorResponse(url, errorMessage, (int)response.StatusCode);
+                    return result;
                 }
-                catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
-                {
-                    Logger.LogWarning(
-                        "Request to {Url} timed out. Attempt {Attempt}/{MaxAttempts}",
-                        url,
-                        attempt + 1,
-                        MaxRetryAttempts);
 
-                    if (attempt < MaxRetryAttempts - 1)
-                    {
-                        await Task.Delay(RetryDelay * (attempt + 1));
-                        continue;
-                    }
-
-                    var timeoutError = "Request timed out after multiple attempts";
-                    Logger.LogError("Request to {Url} timed out after all retry attempts", url);
-                    return CreateErrorResponse(url, timeoutError);
-                }
-                catch (HttpRequestException ex)
-                {
-                    Logger.LogWarning(
-                        ex,
-                        "HTTP request exception for {Url}. Attempt {Attempt}/{MaxAttempts}",
-                        url,
-                        attempt + 1,
-                        MaxRetryAttempts);
-
-                    if (attempt < MaxRetryAttempts - 1)
-                    {
-                        await Task.Delay(RetryDelay * (attempt + 1));
-                        continue;
-                    }
-
-                    var networkError = $"Network error: {ex.Message}";
-                    Logger.LogError(ex, "Network error for {Url} after all retry attempts", url);
-                    return CreateErrorResponse(url, networkError);
-                }
-                catch (Exception ex)
-                {
-                    Logger.LogError(ex, "Unexpected error for {Url}", url);
-                    return CreateErrorResponse(url, $"Unexpected error: {ex.Message}");
-                }
+                var errorMessage = $"HTTP request failed with status {response.StatusCode}: {response.ReasonPhrase}";
+                Logger.LogWarning("Non-success status {StatusCode} for {Url}", response.StatusCode, url);
+                return CreateErrorResponse(url, errorMessage, (int)response.StatusCode);
             }
-
-            return CreateErrorResponse(url, "Maximum retry attempts exceeded");
-        }
-
-        /// <summary>
-        /// Determines if an HTTP status code represents a transient failure that should be retried.
-        /// </summary>
-        /// <param name="statusCode">The HTTP status code to check</param>
-        /// <returns>True if the failure is transient and should be retried</returns>
-        private static bool IsTransientFailure(HttpStatusCode statusCode)
-        {
-            return statusCode == HttpStatusCode.RequestTimeout ||
-                   statusCode == HttpStatusCode.TooManyRequests ||
-                   statusCode == HttpStatusCode.InternalServerError ||
-                   statusCode == HttpStatusCode.BadGateway ||
-                   statusCode == HttpStatusCode.ServiceUnavailable ||
-                   statusCode == HttpStatusCode.GatewayTimeout;
+            catch (BrokenCircuitException ex)
+            {
+                Logger.LogError(ex, "Circuit breaker open for {Url}", url);
+                return CreateErrorResponse(url, "Service temporarily unavailable (circuit breaker open)");
+            }
+            catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+            {
+                Logger.LogWarning(ex, "Request to {Url} timed out", url);
+                return CreateErrorResponse(url, "Request timed out after multiple attempts");
+            }
+            catch (HttpRequestException ex)
+            {
+                Logger.LogError(ex, "Network error for {Url}", url);
+                return CreateErrorResponse(url, $"Network error: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Unexpected error for {Url}", url);
+                return CreateErrorResponse(url, $"Unexpected error: {ex.Message}");
+            }
         }
 
         private static McpToolResponse CreateSuccessResponse(string url, string content)

@@ -6,13 +6,26 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using OpenData.Mcp.Server;
+using OpenData.Mcp.Server.Infrastructure;
 using OpenData.Mcp.Server.Tools;
+using Polly;
+using Polly.Extensions.Http;
 using Xunit;
 
 namespace OpenData.Mcp.Server.Tests;
 
 public class ToolCachingTests
 {
+    private static readonly IAsyncPolicy<HttpResponseMessage> RetryPolicy = HttpPolicyExtensions
+        .HandleTransientHttpError()
+        .OrResult(response => response.StatusCode == HttpStatusCode.TooManyRequests)
+        .WaitAndRetryAsync(HttpClientPolicyFactory.RetryCount, _ => TimeSpan.Zero);
+
+    private static readonly IAsyncPolicy<HttpResponseMessage> CircuitPolicy = HttpPolicyExtensions
+        .HandleTransientHttpError()
+        .OrResult(response => response.StatusCode == HttpStatusCode.TooManyRequests)
+        .CircuitBreakerAsync(HttpClientPolicyFactory.CircuitBreakerFailureThreshold, TimeSpan.FromMilliseconds(50));
+
     [Fact]
     public async Task MembersTools_UsesCachedResponses()
     {
@@ -51,16 +64,26 @@ public class ToolCachingTests
 
     private sealed class TestHttpClientFactory : IHttpClientFactory
     {
-        private readonly HttpMessageHandler _handler;
+        private readonly RecordingHandler _handler;
 
-        public TestHttpClientFactory(HttpMessageHandler handler)
+        public TestHttpClientFactory(RecordingHandler handler)
         {
             _handler = handler;
         }
 
         public HttpClient CreateClient(string name)
         {
-            return new HttpClient(_handler, disposeHandler: false)
+            var circuitHandler = new PolicyDelegatingHandler(CircuitPolicy)
+            {
+                InnerHandler = _handler
+            };
+
+            var retryHandler = new PolicyDelegatingHandler(RetryPolicy)
+            {
+                InnerHandler = circuitHandler
+            };
+
+            return new HttpClient(retryHandler)
             {
                 Timeout = Timeout.InfiniteTimeSpan
             };
@@ -83,6 +106,21 @@ public class ToolCachingTests
             var call = ++CallCount;
             var response = _responseFactory(request, call);
             return Task.FromResult(response);
+        }
+    }
+
+    private sealed class PolicyDelegatingHandler : DelegatingHandler
+    {
+        private readonly IAsyncPolicy<HttpResponseMessage> _policy;
+
+        public PolicyDelegatingHandler(IAsyncPolicy<HttpResponseMessage> policy)
+        {
+            _policy = policy;
+        }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            return _policy.ExecuteAsync(ct => base.SendAsync(request, ct), cancellationToken);
         }
     }
 }
