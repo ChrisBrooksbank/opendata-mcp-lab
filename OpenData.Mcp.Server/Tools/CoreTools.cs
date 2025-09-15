@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
 using OpenData.Mcp.Server.Tools;
 using System.ComponentModel;
@@ -6,18 +7,26 @@ using System.ComponentModel;
 namespace OpenData.Mcp.Server
 {
     [McpServerToolType]
-    public class CoreTools(IHttpClientFactory httpClientFactory, ILogger<CoreTools> logger) : BaseTools(httpClientFactory, logger)
+    public class CoreTools(IHttpClientFactory httpClientFactory, ILogger<CoreTools> logger, IMemoryCache cache) : BaseTools(httpClientFactory, logger, cache)
     {
         [McpServerTool(ReadOnly = true, Idempotent = true, OpenWorld = false), Description("Initialize Parliament data assistant with system prompt | setup, configuration, start session, getting started, how to use, instructions | Use FIRST when beginning parliamentary research to get proper assistant behavior and data handling guidelines | Returns system prompt for optimal parliamentary data interaction")]
-        public async Task<string> HelloParliament()
+        public Task<McpToolResponse> HelloParliament()
         {
-            return GetSystemPrompt();
+            return Task.FromResult(new McpToolResponse
+            {
+                Url = "core://hello-parliament",
+                Data = GetSystemPrompt()
+            });
         }
 
         [McpServerTool(ReadOnly = true, Idempotent = true, OpenWorld = false), Description("End Parliament session and restore normal assistant behavior | exit, quit, finish session, reset, normal mode, end parliamentary mode | Use when finished with parliamentary research to return to standard assistant behavior | Removes parliamentary data restrictions and requirements")]
-        public async Task<string> GoodByeParliament()
+        public Task<McpToolResponse> GoodByeParliament()
         {
-            return GetGoodbyePrompt();
+            return Task.FromResult(new McpToolResponse
+            {
+                Url = "core://goodbye-parliament",
+                Data = GetGoodbyePrompt()
+            });
         }
 
         /// <summary>
