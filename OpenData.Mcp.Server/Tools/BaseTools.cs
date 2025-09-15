@@ -1,27 +1,45 @@
 using System.Text.Json;
 using System.Net;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace OpenData.Mcp.Server.Tools
 {
     /// <summary>
+    /// Structured response for MCP tools containing either data or error information.
+    /// </summary>
+    public class McpToolResponse
+    {
+        public string Url { get; set; } = string.Empty;
+        public object? Data { get; set; }
+        public string? Error { get; set; }
+        public int? StatusCode { get; set; }
+        public bool Success => Error == null;
+    }
+
+    /// <summary>
     /// Base class for Parliament API tools providing common functionality for HTTP operations,
-    /// retry logic, URL building, and error handling.
+    /// retry logic, URL building, error handling, and caching.
     /// </summary>
     public abstract class BaseTools
     {
         protected readonly IHttpClientFactory HttpClientFactory;
         protected readonly ILogger Logger;
+        protected readonly IMemoryCache Cache;
 
         // HTTP configuration constants
         protected static readonly TimeSpan HttpTimeout = TimeSpan.FromSeconds(30);
         protected const int MaxRetryAttempts = 3;
         protected static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(1);
 
-        protected BaseTools(IHttpClientFactory httpClientFactory, ILogger logger)
+        // Cache configuration constants
+        protected static readonly TimeSpan CacheExpiration = TimeSpan.FromMinutes(15);
+
+        protected BaseTools(IHttpClientFactory httpClientFactory, ILogger logger, IMemoryCache cache)
         {
             HttpClientFactory = httpClientFactory ?? throw new ArgumentNullException(nameof(httpClientFactory));
             Logger = logger ?? throw new ArgumentNullException(nameof(logger));
+            Cache = cache ?? throw new ArgumentNullException(nameof(cache));
         }
 
         /// <summary>
@@ -43,13 +61,20 @@ namespace OpenData.Mcp.Server.Tools
         }
 
         /// <summary>
-        /// Makes an HTTP GET request with retry logic and comprehensive error handling.
-        /// Returns JSON serialized response with URL and data/error information.
+        /// Makes an HTTP GET request with retry logic, caching, and comprehensive error handling.
+        /// Returns structured response with URL and data/error information.
         /// </summary>
         /// <param name="url">The URL to make the request to</param>
-        /// <returns>JSON serialized response containing URL and either data or error details</returns>
-        protected async Task<string> GetResult(string url)
+        /// <returns>Structured response containing URL and either data or error details</returns>
+        protected async Task<McpToolResponse> GetResult(string url)
         {
+            // Check cache first
+            if (Cache.TryGetValue(url, out McpToolResponse? cachedResponse) && cachedResponse != null)
+            {
+                Logger.LogInformation("Retrieved cached result for {Url}", url);
+                return cachedResponse;
+            }
+
             for (int attempt = 0; attempt < MaxRetryAttempts; attempt++)
             {
                 try
@@ -64,9 +89,26 @@ namespace OpenData.Mcp.Server.Tools
                     
                     if (response.IsSuccessStatusCode)
                     {
-                        var data = await response.Content.ReadAsStringAsync();
+                        var responseContent = await response.Content.ReadAsStringAsync();
                         Logger.LogInformation("Successfully retrieved data from {Url}", url);
-                        return JsonSerializer.Serialize(new { url, data });
+
+                        // Try to parse as JSON, fallback to string if it fails
+                        object? data;
+                        try
+                        {
+                            data = JsonSerializer.Deserialize<object>(responseContent);
+                        }
+                        catch (JsonException)
+                        {
+                            data = responseContent;
+                        }
+
+                        var result = new McpToolResponse { Url = url, Data = data };
+
+                        // Cache successful results
+                        Cache.Set(url, result, CacheExpiration);
+
+                        return result;
                     }
                     
                     if (IsTransientFailure(response.StatusCode))
@@ -83,7 +125,12 @@ namespace OpenData.Mcp.Server.Tools
                     
                     var errorMessage = $"HTTP request failed with status {response.StatusCode}: {response.ReasonPhrase}";
                     Logger.LogError("Final failure for {Url}: {StatusCode}", url, response.StatusCode);
-                    return JsonSerializer.Serialize(new { url, error = errorMessage, statusCode = (int)response.StatusCode });
+                    return new McpToolResponse
+                    {
+                        Url = url,
+                        Error = errorMessage,
+                        StatusCode = (int)response.StatusCode
+                    };
                 }
                 catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
                 {
@@ -98,7 +145,11 @@ namespace OpenData.Mcp.Server.Tools
                     
                     var timeoutError = "Request timed out after multiple attempts";
                     Logger.LogError("Request to {Url} timed out after all retry attempts", url);
-                    return JsonSerializer.Serialize(new { url, error = timeoutError });
+                    return new McpToolResponse
+                    {
+                        Url = url,
+                        Error = timeoutError
+                    };
                 }
                 catch (HttpRequestException ex)
                 {
@@ -113,16 +164,28 @@ namespace OpenData.Mcp.Server.Tools
                     
                     var networkError = $"Network error: {ex.Message}";
                     Logger.LogError(ex, "Network error for {Url} after all retry attempts", url);
-                    return JsonSerializer.Serialize(new { url, error = networkError });
+                    return new McpToolResponse
+                    {
+                        Url = url,
+                        Error = networkError
+                    };
                 }
                 catch (Exception ex)
                 {
                     Logger.LogError(ex, "Unexpected error for {Url}", url);
-                    return JsonSerializer.Serialize(new { url, error = $"Unexpected error: {ex.Message}" });
+                    return new McpToolResponse
+                    {
+                        Url = url,
+                        Error = $"Unexpected error: {ex.Message}"
+                    };
                 }
             }
-            
-            return JsonSerializer.Serialize(new { url, error = "Maximum retry attempts exceeded" });
+
+            return new McpToolResponse
+            {
+                Url = url,
+                Error = "Maximum retry attempts exceeded"
+            };
         }
         
         /// <summary>
