@@ -7,7 +7,7 @@ using System.ComponentModel;
 namespace OpenData.Mcp.Server
 {
     [McpServerToolType]
-    public class CoreTools(IHttpClientFactory httpClientFactory, ILogger<CoreTools> logger, IMemoryCache cache) : BaseTools(httpClientFactory, logger, cache)
+    public class CoreTools(HttpClient httpClient, ILogger<CoreTools> logger, IMemoryCache cache) : BaseTools(httpClient, logger, cache)
     {
         [McpServerTool(ReadOnly = true, Idempotent = true, OpenWorld = false), Description("Initialize Parliament data assistant with system prompt | setup, configuration, start session, getting started, how to use, instructions | Use FIRST when beginning parliamentary research to get proper assistant behavior and data handling guidelines | Returns system prompt for optimal parliamentary data interaction")]
         public Task<McpToolResponse> HelloParliament()

@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
 using OpenData.Mcp.Server.Tools;
@@ -7,9 +7,9 @@ using System.ComponentModel;
 namespace OpenData.Mcp.Server
 {
     [McpServerToolType]
-    public class InterestsTools(IHttpClientFactory httpClientFactory, ILogger<InterestsTools> logger, IMemoryCache cache) : BaseTools(httpClientFactory, logger, cache)
+    public class InterestsTools(HttpClient httpClient, ILogger<InterestsTools> logger, IMemoryCache cache) : BaseTools(httpClient, logger, cache)
     {
-        protected const string InterestsApiBase = "https://interests-api.parliament.uk/api/v1";
+        internal const string InterestsApiBase = "https://interests-api.parliament.uk/api/v1";
 
         [McpServerTool(ReadOnly = true, Idempotent = true, OpenWorld = false), Description("Search member's Register of Interests for financial and business declarations | register of interests, ROI, financial interests, conflicts of interest, directorships, consultancies, gifts, external roles, transparency | Use for investigating potential conflicts, researching member finances, or checking declared interests | Returns declared interests including directorships, consultancies, gifts, and other financial interests")]
         public async Task<McpToolResponse> SearchRoiAsync([Description("Parliament member ID | Required: get from member search first | Returns all declared interests")] int memberId)

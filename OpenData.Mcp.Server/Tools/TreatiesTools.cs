@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
 using OpenData.Mcp.Server.Tools;
@@ -7,9 +7,9 @@ using System.ComponentModel;
 namespace OpenData.Mcp.Server
 {
     [McpServerToolType]
-    public class TreatiesTools(IHttpClientFactory httpClientFactory, ILogger<TreatiesTools> logger, IMemoryCache cache) : BaseTools(httpClientFactory, logger, cache)
+    public class TreatiesTools(HttpClient httpClient, ILogger<TreatiesTools> logger, IMemoryCache cache) : BaseTools(httpClient, logger, cache)
     {
-        protected const string TreatiesApiBase = "https://treaties-api.parliament.uk/api";
+        internal const string TreatiesApiBase = "https://treaties-api.parliament.uk/api";
 
         [McpServerTool(ReadOnly = true, Idempotent = true, OpenWorld = false), Description("Search UK international treaties and agreements under parliamentary scrutiny | treaties, international agreements, trade deals, diplomatic treaties, international law, bilateral agreements | Use for researching international relations, trade agreements, or diplomatic commitments | Returns treaty details including titles, countries involved, and parliamentary scrutiny status")]
         public async Task<McpToolResponse> SearchTreatiesAsync([Description("Search term for treaties | Examples: 'trade', 'EU', 'climate', 'Brexit' | Searches titles and content")] string searchText)

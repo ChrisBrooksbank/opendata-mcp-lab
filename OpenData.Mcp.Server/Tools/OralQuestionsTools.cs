@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
 using OpenData.Mcp.Server.Tools;
@@ -7,9 +7,9 @@ using System.ComponentModel;
 namespace OpenData.Mcp.Server
 {
     [McpServerToolType]
-    public class OralQuestionsTools(IHttpClientFactory httpClientFactory, ILogger<OralQuestionsTools> logger, IMemoryCache cache) : BaseTools(httpClientFactory, logger, cache)
+    public class OralQuestionsTools(HttpClient httpClient, ILogger<OralQuestionsTools> logger, IMemoryCache cache) : BaseTools(httpClient, logger, cache)
     {
-        protected const string OralQuestionsApiBase = "https://oralquestionsandmotions-api.parliament.uk";
+        internal const string OralQuestionsApiBase = "https://oralquestionsandmotions-api.parliament.uk";
 
         [McpServerTool(ReadOnly = true, Idempotent = true, OpenWorld = false), Description("Get recently tabled Early Day Motions - formal political statements | EDMs, political motions, backbench initiatives, MP opinions, parliamentary statements, political positions, cross-party support | Use for tracking political sentiment, finding MP stances on issues, monitoring backbench activity, or researching political movements | Returns recent EDMs with titles, sponsors, supporters, and tabling dates | Data freshness: updated daily")]
         public async Task<McpToolResponse> GetRecentlyTabledEdmsAsync([Description("Number of EDMs to return | Default: 10, recommended max: 50 | Recent motions returned first")] int take = 10)

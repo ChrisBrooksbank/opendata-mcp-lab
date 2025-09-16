@@ -30,9 +30,9 @@ public class ToolCachingTests
     public async Task MembersTools_UsesCachedResponses()
     {
         var handler = new RecordingHandler((request, call) => SuccessResponse($"{{\"call\":{call}}}"));
-        var factory = new TestHttpClientFactory(handler);
         using var cache = new MemoryCache(new MemoryCacheOptions());
-        var tools = new MembersTools(factory, NullLogger<MembersTools>.Instance, cache);
+        using var httpClient = CreateHttpClient(handler);
+        var tools = new MembersTools(httpClient, NullLogger<MembersTools>.Instance, cache);
 
         await tools.GetAnsweringBodiesAsync();
         await tools.GetAnsweringBodiesAsync();
@@ -44,9 +44,9 @@ public class ToolCachingTests
     public async Task NowTools_DisablesCaching()
     {
         var handler = new RecordingHandler((request, call) => SuccessResponse($"{{\"call\":{call}}}"));
-        var factory = new TestHttpClientFactory(handler);
         using var cache = new MemoryCache(new MemoryCacheOptions());
-        var tools = new NowTools(factory, NullLogger<NowTools>.Instance, cache);
+        using var httpClient = CreateHttpClient(handler);
+        var tools = new NowTools(httpClient, NullLogger<NowTools>.Instance, cache);
 
         await tools.HappeningNowInCommonsAsync();
         await tools.HappeningNowInCommonsAsync();
@@ -62,32 +62,22 @@ public class ToolCachingTests
         };
     }
 
-    private sealed class TestHttpClientFactory : IHttpClientFactory
+    private static HttpClient CreateHttpClient(RecordingHandler handler)
     {
-        private readonly RecordingHandler _handler;
-
-        public TestHttpClientFactory(RecordingHandler handler)
+        var circuitHandler = new PolicyDelegatingHandler(CircuitPolicy)
         {
-            _handler = handler;
-        }
+            InnerHandler = handler
+        };
 
-        public HttpClient CreateClient(string name)
+        var retryHandler = new PolicyDelegatingHandler(RetryPolicy)
         {
-            var circuitHandler = new PolicyDelegatingHandler(CircuitPolicy)
-            {
-                InnerHandler = _handler
-            };
+            InnerHandler = circuitHandler
+        };
 
-            var retryHandler = new PolicyDelegatingHandler(RetryPolicy)
-            {
-                InnerHandler = circuitHandler
-            };
-
-            return new HttpClient(retryHandler)
-            {
-                Timeout = Timeout.InfiniteTimeSpan
-            };
-        }
+        return new HttpClient(retryHandler)
+        {
+            Timeout = Timeout.InfiniteTimeSpan
+        };
     }
 
     private sealed class RecordingHandler : HttpMessageHandler

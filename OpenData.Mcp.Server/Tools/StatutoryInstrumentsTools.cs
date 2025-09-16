@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
 using OpenData.Mcp.Server.Tools;
@@ -7,9 +7,9 @@ using System.ComponentModel;
 namespace OpenData.Mcp.Server
 {
     [McpServerToolType]
-    public class StatutoryInstrumentsTools(IHttpClientFactory httpClientFactory, ILogger<StatutoryInstrumentsTools> logger, IMemoryCache cache) : BaseTools(httpClientFactory, logger, cache)
+    public class StatutoryInstrumentsTools(HttpClient httpClient, ILogger<StatutoryInstrumentsTools> logger, IMemoryCache cache) : BaseTools(httpClient, logger, cache)
     {
-        protected const string StatutoryInstrumentsApiBase = "https://statutoryinstruments-api.parliament.uk/api/v2";
+        internal const string StatutoryInstrumentsApiBase = "https://statutoryinstruments-api.parliament.uk/api/v2";
 
         [McpServerTool(ReadOnly = true, Idempotent = true, OpenWorld = false), Description("Search for Statutory Instruments (secondary legislation) by name. Use when researching government regulations, rules, or orders made under primary legislation. SIs are used to implement or modify laws.")]
         public async Task<McpToolResponse> SearchStatutoryInstrumentsAsync([Description("Name or title of the statutory instrument to search for")] string name)

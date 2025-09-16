@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
 using OpenData.Mcp.Server.Tools;
@@ -7,9 +7,9 @@ using System.ComponentModel;
 namespace OpenData.Mcp.Server
 {
     [McpServerToolType]
-    public class MembersTools(IHttpClientFactory httpClientFactory, ILogger<MembersTools> logger, IMemoryCache cache) : BaseTools(httpClientFactory, logger, cache)
+    public class MembersTools(HttpClient httpClient, ILogger<MembersTools> logger, IMemoryCache cache) : BaseTools(httpClient, logger, cache)
     {
-        protected const string MembersApiBase = "https://members-api.parliament.uk/api";
+        internal const string MembersApiBase = "https://members-api.parliament.uk/api";
 
         [McpServerTool(ReadOnly = true, Idempotent = true, OpenWorld = false), Description("Search for MPs and Lords by name with comprehensive member details | find MP, search politician, lookup member, who is, member search, parliamentary representative | Use for identifying members, checking spellings, finding member IDs, or getting basic member information | Returns member profiles with names, parties, constituencies, and current status")]
         public async Task<McpToolResponse> GetMemberByNameAsync(IMcpServer thisServer, [Description("Full or partial name to search for | Examples: 'Boris Johnson', 'Keir Starmer', 'Smith' | Searches current and former members")] string name)

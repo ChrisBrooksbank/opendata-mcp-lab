@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
 using OpenData.Mcp.Server.Tools;
 using System.ComponentModel;
@@ -7,9 +7,9 @@ using Microsoft.Extensions.Caching.Memory;
 namespace OpenData.Mcp.Server
 {
     [McpServerToolType]
-    public class LordsVotesTools(IHttpClientFactory httpClientFactory, ILogger<LordsVotesTools> logger, IMemoryCache cache) : BaseTools(httpClientFactory, logger, cache)
+    public class LordsVotesTools(HttpClient httpClient, ILogger<LordsVotesTools> logger, IMemoryCache cache) : BaseTools(httpClient, logger, cache)
     {
-        protected const string LordsVotesApiBase = "https://lordsvotes-api.parliament.uk/data";
+        internal const string LordsVotesApiBase = "https://lordsvotes-api.parliament.uk/data";
 
         [McpServerTool(ReadOnly = true, Idempotent = true, OpenWorld = false), Description("Search House of Lords voting records (divisions). Use when you want to find how Lords voted on specific issues, bills, or amendments in the upper chamber.")]
         public async Task<McpToolResponse> SearchLordsDivisionsAsync([Description("Search term for Lords division topics (e.g. 'brexit', 'climate', 'NHS')")] string searchTerm)
