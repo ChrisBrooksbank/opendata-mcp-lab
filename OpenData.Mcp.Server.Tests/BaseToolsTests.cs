@@ -6,7 +6,10 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
+using OpenData.Mcp.Server.Infrastructure;
 using OpenData.Mcp.Server.Tools;
+using Polly;
+using Polly.Extensions.Http;
 using Xunit;
 
 namespace OpenData.Mcp.Server.Tests;
@@ -106,7 +109,7 @@ public class BaseToolsTests
         Assert.False(response.Success);
         Assert.Equal((int)HttpStatusCode.InternalServerError, response.StatusCode);
         Assert.Contains("HTTP request failed", response.Error);
-        Assert.Equal(BaseTools.MaxRetryAttempts, handler.CallCount);
+        Assert.Equal(HttpClientPolicyFactory.RetryCount + 1, handler.CallCount);
     }
 
     [Fact]
@@ -124,6 +127,24 @@ public class BaseToolsTests
         Assert.Null(response.GetData<TestPayload>());
     }
 
+    [Fact]
+    public async Task GetResult_ReturnsCircuitBreakerError()
+    {
+        var handler = new RecordingHandler((_, _) => new HttpResponseMessage(HttpStatusCode.InternalServerError));
+        var retryPolicy = CreateTestRetryPolicy();
+        var breakerPolicy = HttpPolicyExtensions
+            .HandleTransientHttpError()
+            .CircuitBreakerAsync(1, TimeSpan.FromSeconds(1));
+        var tools = CreateTools(handler, retryPolicy, breakerPolicy);
+
+        await tools.ExecuteAsync("https://example.com/breaker");
+
+        var response = await tools.ExecuteAsync("https://example.com/breaker");
+
+        Assert.False(response.Success);
+        Assert.Contains("circuit breaker", response.Error, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static HttpResponseMessage SuccessResponse(string content, string mediaType = "application/json")
     {
         return new HttpResponseMessage(HttpStatusCode.OK)
@@ -132,11 +153,33 @@ public class BaseToolsTests
         };
     }
 
-    private static TestBaseTools CreateTools(HttpMessageHandler handler)
+    private static TestBaseTools CreateTools(
+        RecordingHandler handler,
+        IAsyncPolicy<HttpResponseMessage>? retryPolicy = null,
+        IAsyncPolicy<HttpResponseMessage>? circuitBreakerPolicy = null)
     {
-        var factory = new TestHttpClientFactory(handler);
+        retryPolicy ??= CreateTestRetryPolicy();
+        circuitBreakerPolicy ??= CreateTestCircuitBreakerPolicy();
+
+        var factory = new TestHttpClientFactory(handler, retryPolicy, circuitBreakerPolicy);
         var cache = new MemoryCache(new MemoryCacheOptions());
         return new TestBaseTools(factory, cache);
+    }
+
+    private static IAsyncPolicy<HttpResponseMessage> CreateTestRetryPolicy()
+    {
+        return HttpPolicyExtensions
+            .HandleTransientHttpError()
+            .OrResult(response => response.StatusCode == HttpStatusCode.TooManyRequests)
+            .WaitAndRetryAsync(HttpClientPolicyFactory.RetryCount, _ => TimeSpan.Zero);
+    }
+
+    private static IAsyncPolicy<HttpResponseMessage> CreateTestCircuitBreakerPolicy()
+    {
+        return HttpPolicyExtensions
+            .HandleTransientHttpError()
+            .OrResult(response => response.StatusCode == HttpStatusCode.TooManyRequests)
+            .CircuitBreakerAsync(HttpClientPolicyFactory.CircuitBreakerFailureThreshold, TimeSpan.FromMilliseconds(50));
     }
 
     private sealed record TestPayload(int Value);
@@ -154,16 +197,33 @@ public class BaseToolsTests
 
     private sealed class TestHttpClientFactory : IHttpClientFactory
     {
-        private readonly HttpMessageHandler _handler;
+        private readonly RecordingHandler _handler;
+        private readonly IAsyncPolicy<HttpResponseMessage> _retryPolicy;
+        private readonly IAsyncPolicy<HttpResponseMessage> _circuitBreakerPolicy;
 
-        public TestHttpClientFactory(HttpMessageHandler handler)
+        public TestHttpClientFactory(
+            RecordingHandler handler,
+            IAsyncPolicy<HttpResponseMessage> retryPolicy,
+            IAsyncPolicy<HttpResponseMessage> circuitBreakerPolicy)
         {
             _handler = handler;
+            _retryPolicy = retryPolicy;
+            _circuitBreakerPolicy = circuitBreakerPolicy;
         }
 
         public HttpClient CreateClient(string name)
         {
-            return new HttpClient(_handler, disposeHandler: false)
+            var circuitHandler = new PolicyDelegatingHandler(_circuitBreakerPolicy)
+            {
+                InnerHandler = _handler
+            };
+
+            var retryHandler = new PolicyDelegatingHandler(_retryPolicy)
+            {
+                InnerHandler = circuitHandler
+            };
+
+            return new HttpClient(retryHandler)
             {
                 Timeout = Timeout.InfiniteTimeSpan
             };
@@ -186,6 +246,21 @@ public class BaseToolsTests
             var call = ++CallCount;
             var response = _responseFactory(request, call);
             return Task.FromResult(response);
+        }
+    }
+
+    private sealed class PolicyDelegatingHandler : DelegatingHandler
+    {
+        private readonly IAsyncPolicy<HttpResponseMessage> _policy;
+
+        public PolicyDelegatingHandler(IAsyncPolicy<HttpResponseMessage> policy)
+        {
+            _policy = policy;
+        }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            return _policy.ExecuteAsync(ct => base.SendAsync(request, ct), cancellationToken);
         }
     }
 }
