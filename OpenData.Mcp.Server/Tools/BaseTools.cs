@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http;
 using System.Text.Json;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
@@ -59,7 +60,7 @@ namespace OpenData.Mcp.Server.Tools
     {
         protected static readonly TimeSpan CacheExpiration = TimeSpan.FromMinutes(15);
 
-        protected readonly IHttpClientFactory HttpClientFactory;
+        protected readonly HttpClient HttpClient;
         protected readonly ILogger Logger;
         protected readonly IMemoryCache Cache;
 
@@ -73,9 +74,9 @@ namespace OpenData.Mcp.Server.Tools
             public static CacheSettings FromTtl(TimeSpan ttl) => new(true, ttl);
         }
 
-        protected BaseTools(IHttpClientFactory httpClientFactory, ILogger logger, IMemoryCache cache)
+        protected BaseTools(HttpClient httpClient, ILogger logger, IMemoryCache cache)
         {
-            HttpClientFactory = httpClientFactory ?? throw new ArgumentNullException(nameof(httpClientFactory));
+            HttpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
             Logger = logger ?? throw new ArgumentNullException(nameof(logger));
             Cache = cache ?? throw new ArgumentNullException(nameof(cache));
         }
@@ -110,8 +111,7 @@ namespace OpenData.Mcp.Server.Tools
 
             try
             {
-                using var httpClient = HttpClientFactory.CreateClient(HttpClientPolicyFactory.ClientName);
-                var response = await httpClient.GetAsync(url);
+                var response = await HttpClient.GetAsync(url);
 
                 if (response.IsSuccessStatusCode)
                 {

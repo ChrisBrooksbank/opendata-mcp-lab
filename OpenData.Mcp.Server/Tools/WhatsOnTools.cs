@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
 using OpenData.Mcp.Server.Tools;
@@ -7,9 +7,9 @@ using System.ComponentModel;
 namespace OpenData.Mcp.Server
 {
     [McpServerToolType]
-    public class WhatsOnTools(IHttpClientFactory httpClientFactory, ILogger<WhatsOnTools> logger, IMemoryCache cache) : BaseTools(httpClientFactory, logger, cache)
+    public class WhatsOnTools(HttpClient httpClient, ILogger<WhatsOnTools> logger, IMemoryCache cache) : BaseTools(httpClient, logger, cache)
     {
-        protected const string WhatsonApiBase = "https://whatson-api.parliament.uk/calendar";
+        internal const string WhatsonApiBase = "https://whatson-api.parliament.uk/calendar";
 
         [McpServerTool(ReadOnly = true, Idempotent = true, OpenWorld = false), Description("Search parliamentary calendar for upcoming events and business in either chamber. Use when you want to know what's scheduled in Parliament, upcoming debates, or future parliamentary business. House: Commons/Lords.")]
         public async Task<McpToolResponse> SearchCalendar([Description("House name: 'Commons' or 'Lords'")] string house, [Description("Start date in YYYY-MM-DD format")] string startDate, [Description("End date in YYYY-MM-DD format")] string endDate)

@@ -7,9 +7,9 @@ using System.ComponentModel;
 namespace OpenData.Mcp.Server
 {
     [McpServerToolType]
-    public class NowTools(IHttpClientFactory httpClientFactory, ILogger<NowTools> logger, IMemoryCache cache) : BaseTools(httpClientFactory, logger, cache)
+    public class NowTools(HttpClient httpClient, ILogger<NowTools> logger, IMemoryCache cache) : BaseTools(httpClient, logger, cache)
     {
-        protected const string NowApiBase = "https://now-api.parliament.uk/api";
+        internal const string NowApiBase = "https://now-api.parliament.uk/api";
 
         [McpServerTool(ReadOnly = true, Idempotent = true, OpenWorld = false), Description("Get live information about what's currently happening in the House of Commons chamber. Use when you want real-time updates on parliamentary business, current debates, or voting activity.")]
         public async Task<McpToolResponse> HappeningNowInCommonsAsync()

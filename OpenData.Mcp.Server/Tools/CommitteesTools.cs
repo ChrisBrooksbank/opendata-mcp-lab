@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
 using OpenData.Mcp.Server.Tools;
@@ -7,9 +7,9 @@ using System.ComponentModel;
 namespace OpenData.Mcp.Server
 {
     [McpServerToolType]
-    public class CommitteesTools(IHttpClientFactory httpClientFactory, ILogger<CommitteesTools> logger, IMemoryCache cache) : BaseTools(httpClientFactory, logger, cache)
+    public class CommitteesTools(HttpClient httpClient, ILogger<CommitteesTools> logger, IMemoryCache cache) : BaseTools(httpClient, logger, cache)
     {
-        protected const string CommitteesApiBase = "https://committees-api.parliament.uk/api";
+        internal const string CommitteesApiBase = "https://committees-api.parliament.uk/api";
 
         [McpServerTool(ReadOnly = true, Idempotent = true, OpenWorld = false), Description("Find committee meetings and hearings by date range | committee meetings, parliamentary hearings, committee schedule, committee calendar, when committees meet | Use for finding committee schedules, planning attendance, or researching past committee activity | Returns meeting details including committees, dates, times, and topics | Covers both Commons and Lords committees")]
         public async Task<McpToolResponse> GetCommitteeMeetingsAsync(

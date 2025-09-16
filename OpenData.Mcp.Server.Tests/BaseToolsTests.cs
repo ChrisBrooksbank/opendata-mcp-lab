@@ -161,9 +161,30 @@ public class BaseToolsTests
         retryPolicy ??= CreateTestRetryPolicy();
         circuitBreakerPolicy ??= CreateTestCircuitBreakerPolicy();
 
-        var factory = new TestHttpClientFactory(handler, retryPolicy, circuitBreakerPolicy);
+        var client = CreateHttpClient(handler, retryPolicy, circuitBreakerPolicy);
         var cache = new MemoryCache(new MemoryCacheOptions());
-        return new TestBaseTools(factory, cache);
+        return new TestBaseTools(client, cache);
+    }
+
+    private static HttpClient CreateHttpClient(
+        RecordingHandler handler,
+        IAsyncPolicy<HttpResponseMessage> retryPolicy,
+        IAsyncPolicy<HttpResponseMessage> circuitBreakerPolicy)
+    {
+        var circuitHandler = new PolicyDelegatingHandler(circuitBreakerPolicy)
+        {
+            InnerHandler = handler
+        };
+
+        var retryHandler = new PolicyDelegatingHandler(retryPolicy)
+        {
+            InnerHandler = circuitHandler
+        };
+
+        return new HttpClient(retryHandler)
+        {
+            Timeout = Timeout.InfiniteTimeSpan
+        };
     }
 
     private static IAsyncPolicy<HttpResponseMessage> CreateTestRetryPolicy()
@@ -186,48 +207,13 @@ public class BaseToolsTests
 
     private sealed class TestBaseTools : BaseTools
     {
-        public TestBaseTools(IHttpClientFactory httpClientFactory, IMemoryCache cache)
-            : base(httpClientFactory, NullLogger.Instance, cache)
+        public TestBaseTools(HttpClient httpClient, IMemoryCache cache)
+            : base(httpClient, NullLogger.Instance, cache)
         {
         }
 
         public Task<McpToolResponse> ExecuteAsync(string url, CacheSettings? settings = null)
             => GetResult(url, settings);
-    }
-
-    private sealed class TestHttpClientFactory : IHttpClientFactory
-    {
-        private readonly RecordingHandler _handler;
-        private readonly IAsyncPolicy<HttpResponseMessage> _retryPolicy;
-        private readonly IAsyncPolicy<HttpResponseMessage> _circuitBreakerPolicy;
-
-        public TestHttpClientFactory(
-            RecordingHandler handler,
-            IAsyncPolicy<HttpResponseMessage> retryPolicy,
-            IAsyncPolicy<HttpResponseMessage> circuitBreakerPolicy)
-        {
-            _handler = handler;
-            _retryPolicy = retryPolicy;
-            _circuitBreakerPolicy = circuitBreakerPolicy;
-        }
-
-        public HttpClient CreateClient(string name)
-        {
-            var circuitHandler = new PolicyDelegatingHandler(_circuitBreakerPolicy)
-            {
-                InnerHandler = _handler
-            };
-
-            var retryHandler = new PolicyDelegatingHandler(_retryPolicy)
-            {
-                InnerHandler = circuitHandler
-            };
-
-            return new HttpClient(retryHandler)
-            {
-                Timeout = Timeout.InfiniteTimeSpan
-            };
-        }
     }
 
     private sealed class RecordingHandler : HttpMessageHandler

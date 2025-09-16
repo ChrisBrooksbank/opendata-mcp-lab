@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
 using System.ComponentModel;
@@ -6,9 +6,9 @@ using System.ComponentModel;
 namespace OpenData.Mcp.Server.Tools
 {
     [McpServerToolType]
-    public class BillsTools(IHttpClientFactory httpClientFactory, ILogger<BillsTools> logger, IMemoryCache cache) : BaseTools(httpClientFactory, logger, cache)
+    public class BillsTools(HttpClient httpClient, ILogger<BillsTools> logger, IMemoryCache cache) : BaseTools(httpClient, logger, cache)
     {
-        protected const string BillsApiBase = "https://bills-api.parliament.uk/api/v1";
+        internal const string BillsApiBase = "https://bills-api.parliament.uk/api/v1";
 
         [McpServerTool(ReadOnly = true, Idempotent = true, OpenWorld = false), Description("Get most recently updated bills and current legislative activity | recent bills, new legislation, latest laws, parliamentary bills, legislative updates, current proposals | Use for tracking new legislation, monitoring bill progress, or finding recently introduced/updated laws | Returns bill titles, stages, sponsors, dates, and current status | Data freshness: updated frequently")]
         public async Task<McpToolResponse> GetRecentlyUpdatedBillsAsync([Description("Number of bills to return | Default: 10, recommended max: 50 | Higher numbers may slow response")] int take = 10)

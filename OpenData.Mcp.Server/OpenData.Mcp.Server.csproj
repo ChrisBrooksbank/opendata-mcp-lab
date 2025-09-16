@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -15,4 +15,15 @@
     <PackageReference Include="ModelContextProtocol" Version="0.3.0-preview.4" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="..\context\*.json">
+      <Link>context\%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
 </Project>
+
+
+
+
+

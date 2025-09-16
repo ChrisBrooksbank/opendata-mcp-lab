@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Server;
 using OpenData.Mcp.Server.Tools;
 using System.ComponentModel;
@@ -7,9 +7,9 @@ using Microsoft.Extensions.Caching.Memory;
 namespace OpenData.Mcp.Server
 {
     [McpServerToolType]
-    public class CommonsVotesTools(IHttpClientFactory httpClientFactory, ILogger<CommonsVotesTools> logger, IMemoryCache cache) : BaseTools(httpClientFactory, logger, cache)
+    public class CommonsVotesTools(HttpClient httpClient, ILogger<CommonsVotesTools> logger, IMemoryCache cache) : BaseTools(httpClient, logger, cache)
     {
-        protected const string CommonsVotesApiBase = "https://commonsvotes-api.parliament.uk/data";
+        internal const string CommonsVotesApiBase = "https://commonsvotes-api.parliament.uk/data";
 
         [McpServerTool(ReadOnly = true, Idempotent = true, OpenWorld = false), Description("Search House of Commons voting records (divisions). Use when you want to find how MPs voted on specific issues, bills, or amendments. Can filter by member, date range, or division number.")]
         public async Task<McpToolResponse> SearchCommonsDivisionsAsync([Description("Search term for division topics (e.g. 'brexit', 'climate', 'NHS')")] string searchTerm, [Description("Optional: specific member ID to filter votes")] int? memberId = null, [Description("Optional: start date in YYYY-MM-DD format")] string? startDate = null, [Description("Optional: end date in YYYY-MM-DD format")] string? endDate = null, [Description("Optional: specific division number")] int? divisionNumber = null)
