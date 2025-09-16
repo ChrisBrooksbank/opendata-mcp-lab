@@ -10,3 +10,5 @@ dotnet test OpenDataMcpServer.sln
 `
 
 Any value other than 	rue (case-insensitive) keeps the tests skipped.
+
+These tests also run weekly via the Live Integration Tests GitHub Actions workflow (cron at 03:00 UTC on Mondays).
